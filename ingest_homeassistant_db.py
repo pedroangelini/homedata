@@ -153,9 +153,9 @@ def main() -> int:
     result = con.sql(
         """select 
         count(*) cnt,
-        to_timestamp(min(last_updated_ts)) min_ts, 
-        to_timestamp(max(last_updated_ts)) max_ts 
-        from staging.home_assistant_events;""",
+        min(last_updated) min_ts, 
+        max(last_updated) max_ts 
+        from raw_data.events;""",
     ).fetchone()
     print(
         f"[ℹ️] events stats before - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
@@ -172,9 +172,9 @@ def main() -> int:
     result = con.sql(
         """select 
         count(*) cnt,
-        to_timestamp(min(last_updated_ts)) min_ts, 
-        to_timestamp(max(last_updated_ts)) max_ts 
-        from staging.home_assistant_events;""",
+        min(last_updated) min_ts, 
+        max(last_updated) max_ts 
+        from raw_data.events;""",
     ).fetchone()
     print(
         f"[✅] events stats - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
