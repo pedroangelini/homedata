@@ -1,6 +1,6 @@
-
 HA_HOSTNAME = "the_host"
 HA_USERNAME = "the_user"
 HA_SSH_KEY_FILE = "your_ssh_key_file"
-HA_DB_FILE = "/config/home-assistant_v2.db"
 STAGING_FOLDER = "./staging/"
+HA_DB_FILE = "/config/home-assistant_v2.db"
+ANALYTICAL_DB_FILE = "./database/homedata.duckdb"

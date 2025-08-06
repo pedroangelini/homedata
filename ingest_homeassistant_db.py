@@ -3,6 +3,7 @@ import contextlib
 import tomllib
 from collections.abc import Generator
 from pathlib import Path, PurePath, PurePosixPath
+from datetime import datetime
 
 import duckdb
 import paramiko
@@ -27,7 +28,7 @@ def HomeAssistantSSHClient() -> Generator[paramiko.SSHClient, None, None]:
     uname = stdout.read().decode()
     (_, stdout, _) = ssh_client.exec_command("echo $USER@$(hostname)")
     user_host = stdout.read().decode()
-    print(f"[ℹ️ ] {user_host}[ℹ️ ]{uname}", end="")
+    print(f"[ℹ️] {user_host}[ℹ️]{uname}", end="")
     yield ssh_client
     print("[✅] closing connection")
     ssh_client.close()
@@ -58,7 +59,7 @@ def download_database(ssh_client, db_file: PurePath, destination_folder: Path):
         unit_scale=True,
         unit_divisor=1024,
         miniters=1,
-        desc="[ℹ️ ] main db        ",  # padding with
+        desc="[ℹ️] main db        ",  # padding with
     ) as pbar:
         ftp_client.get(
             str(db_file),
@@ -67,13 +68,26 @@ def download_database(ssh_client, db_file: PurePath, destination_folder: Path):
         )
     wal_file = db_file.name + "-wal"
     with TqdmUpTo(
-        unit="B", unit_scale=True, unit_divisor=1024, desc="[ℹ️ ] write-ahead log"
+        unit="B", unit_scale=True, unit_divisor=1024, desc="[ℹ️] write-ahead log"
     ) as pbar:
         ftp_client.get(
             str(db_file.parent / wal_file),
             str(destination_folder / wal_file),
             callback=pbar.update_to,
         )
+
+
+def run_sql_query_file(
+    con: duckdb.DuckDBPyConnection, file: str | Path
+) -> duckdb.DuckDBPyRelation:
+    with open(file, "r") as fp:
+        q = fp.read()
+    return con.sql(q)
+
+
+def table_stats_str(result: tuple[int, datetime, datetime]) -> str:
+    """returns a string from a result tuple containing count, min timestamp, max timestamp"""
+    return f"count {result[0]}, min ts: {result[1].strftime("%Y-%m-%d %H:%M:%S %z")}, max ts: {result[2].strftime("%Y-%m-%d %H:%M:%S %z")}"
 
 
 def main() -> int:
@@ -90,6 +104,12 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
+        "-s",
+        "--skip_download",
+        help="skips downloading file from ha server",
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
         "--config_file",
         type=argparse.FileType("r"),
         help="config file in TOML format",
@@ -101,24 +121,69 @@ def main() -> int:
         conf = tomllib.load(fp)
 
     # download db locally
-    with HomeAssistantSSHClient() as ha:
-        Path(conf["STAGING_FOLDER"]).mkdir(parents=True, exist_ok=True)
-        download_database(
-            ha, PurePosixPath(conf["HA_DB_FILE"]), Path(conf["STAGING_FOLDER"])
-        )
+    if not args.skip_download:
+        with HomeAssistantSSHClient() as ha:
+            Path(conf["STAGING_FOLDER"]).mkdir(parents=True, exist_ok=True)
+            download_database(
+                ha, PurePosixPath(conf["HA_DB_FILE"]), Path(conf["STAGING_FOLDER"])
+            )
+    else:
+        print("[❗] skipping downloading file from ha server")
+
+    # create a connection to the db file
+    con = duckdb.connect(conf["ANALYTICAL_DB_FILE"])
+    # ensure schemas and tables are there
+    run_sql_query_file(con, "queries/schemas.sql")
+    print("[✅] ensured schemas are present in db")
+
+    # read staging file into duckdb database
+    print("[ℹ️] reading from ha database to analytical db...")
+    run_sql_query_file(con, "queries/staging.home_assistant_events.sql")
+    result = con.sql(
+        """select 
+        count(*) cnt,
+        to_timestamp(min(last_updated_ts)) min_ts, 
+        to_timestamp(max(last_updated_ts)) max_ts 
+        from staging.home_assistant_events;""",
+    ).fetchone()
+    print(
+        f"[✅] staging success - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
+    )
+
+    result = con.sql(
+        """select 
+        count(*) cnt,
+        to_timestamp(min(last_updated_ts)) min_ts, 
+        to_timestamp(max(last_updated_ts)) max_ts 
+        from staging.home_assistant_events;""",
+    ).fetchone()
+    print(
+        f"[ℹ️] events stats before - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
+    )
+    if args.full_load:
+        print("[❗] integrating data to events table - full load")
+        run_sql_query_file(con, "queries/raw.events-full.sql")
+        print("[✅] success")
+    else:
+        print("[ℹ️] integrating data to events table - delta load")
+        run_sql_query_file(con, "queries/raw.events-delta.sql")
+        print("[✅] success")
+
+    result = con.sql(
+        """select 
+        count(*) cnt,
+        to_timestamp(min(last_updated_ts)) min_ts, 
+        to_timestamp(max(last_updated_ts)) max_ts 
+        from staging.home_assistant_events;""",
+    ).fetchone()
+    print(
+        f"[✅] events stats - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
+    )
+
+    # explicitly close the connection
+    con.close()
 
     return 0
-
-    # # create a connection to a file called 'file.db'
-    # con = duckdb.connect("file.db")
-    # # create a table and load data into it
-    # con.sql("CREATE TABLE test (i INTEGER)")
-    # con.sql("INSERT INTO test VALUES (42)")
-    # # query the table
-    # con.table("test").show()
-    # # explicitly close the connection
-    # con.close()
-    # # Note: connections also closed implicitly when they go out of scope
 
 
 if __name__ == "__main__":
