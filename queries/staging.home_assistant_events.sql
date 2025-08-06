@@ -15,7 +15,8 @@ select
     last_updated_ts,
     old_state_id,
     shared_attrs,
-    states_meta.entity_id
+    states_meta.entity_id,
+    current_localtimestamp () as ingested_at
 from
     ha_staging_db.states
     left join ha_staging_db.state_attributes on state_attributes.attributes_id = states.attributes_id
