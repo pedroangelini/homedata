@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 conf: dict
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 logger.propagate = False
 
 
@@ -32,7 +32,8 @@ def HomeAssistantSSHClient() -> Generator[paramiko.SSHClient, None, None]:
     uname = stdout.read().decode()
     (_, stdout, _) = ssh_client.exec_command("echo $USER@$(hostname)")
     user_host = stdout.read().decode()
-    logger.info(f"[ℹ️] {user_host}[ℹ️]{uname}")
+    logger.info(f"[ℹ️] server info: {user_host.strip()}")
+    logger.info(f"[ℹ️] server info: {uname}")
     yield ssh_client
     logger.info("[✅] closing connection")
     ssh_client.close()
@@ -56,7 +57,7 @@ class TqdmUpTo(tqdm):
 
 
 def download_database(ssh_client, db_file: PurePath, destination_folder: Path):
-    logger.info("[ℹ️] downloading db")
+    logger.info("[⚙️] downloading db")
     ftp_client = ssh_client.open_sftp()
     with TqdmUpTo(
         unit="B",
@@ -130,8 +131,6 @@ def main() -> int:
     with open(args.config_file, "rb") as fp:
         conf = tomllib.load(fp)
 
-    logger.debug("loaded config: {conf}")
-
     fileformatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     filehandler = logging.FileHandler(conf["LOG_FILE"], encoding="utf-8")
     filehandler.setFormatter(fileformatter)
@@ -143,6 +142,7 @@ def main() -> int:
         logger.addHandler(stdouthandler)
 
     logger.info(" ----- STARTING NEW SESSION ----- ")
+    logger.debug(f"[ℹ️] loaded config: {conf}")
 
     # download db locally
     if not args.skip_download:
@@ -155,13 +155,15 @@ def main() -> int:
         logger.info("[❗] skipping downloading file from ha server")
 
     # create a connection to the db file
+
     con = duckdb.connect(conf["ANALYTICAL_DB_FILE"])
+
     # ensure schemas and tables are there
     run_sql_query_file(con, "queries/schemas.sql")
     logger.info("[✅] ensured schemas are present in db")
 
     # read staging file into duckdb database
-    logger.info("[ℹ️] reading from ha database to analytical db...")
+    logger.info("[⚙️] reading from ha database to analytical db...")
     run_sql_query_file(con, "queries/staging.home_assistant_events.sql")
     result = con.sql(
         """select 
@@ -189,7 +191,7 @@ def main() -> int:
         run_sql_query_file(con, "queries/raw.events-full.sql")
         logger.info("[✅] success")
     else:
-        logger.info("[ℹ️] integrating data to events table - delta load")
+        logger.info("[⚙️] integrating data to events table - delta load")
         run_sql_query_file(con, "queries/raw.events-delta.sql")
         logger.info("[✅] success")
 
