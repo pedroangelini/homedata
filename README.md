@@ -23,12 +23,19 @@ Activate the python virtual environment (platform dependent), and run the ingest
 You must run with the `--full_load` option the first time to create the tables properly. After that, only run a `full_load` if you intend to delete the data saved in the `events` table and re-load.  
 
 ```text
+usage: ingest_homeassistant_db.py [-h] [-f | --full_load | --no-full_load] [-s | --skip_download | --no-skip_download]
+                                  [-v | --verbose | --no-verbose] [--config_file CONFIG_FILE]
+
+script that imports raw sensor data from homeassistant into a duckdb database
+
 options:
   -h, --help            show this help message and exit
   -f, --full_load, --no-full_load
                         TRUNCATES the existing raw table and reloads from staging (will delete older data)
   -s, --skip_download, --no-skip_download
                         skips downloading file from ha server
+  -v, --verbose, --no-verbose
+                        should print output to stdout
   --config_file CONFIG_FILE
                         config file in TOML format
 ```
@@ -52,3 +59,7 @@ homedata (database)
 
 It should be fine to run this script periodically, every few hours or even faster. Since it only copies the sqlite file from HA without opening the live remote file, impact into the running HA instance should be minimal. The script also copies the Write-Ahead-Log (wal) file, so it should bring a very up-to-date version of the db.
 I plan on running it 3 or 4 times a day.
+
+## Logging
+
+Log file can be configured in the config.toml (LOG_FILE) and if you pass -v / --verbose option, the same messages will also be output to stdout.

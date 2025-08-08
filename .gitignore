@@ -1,6 +1,8 @@
 .env
 .venv
-staging
-database
+staging/*
+database/*
+logs/*
+analysis_tmp
+!.gitkeep
 config.toml
-analysis_tmp/

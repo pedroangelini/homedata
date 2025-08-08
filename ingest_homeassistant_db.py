@@ -4,12 +4,16 @@ import tomllib
 from collections.abc import Generator
 from pathlib import Path, PurePath, PurePosixPath
 from datetime import datetime
+import logging
 
 import duckdb
 import paramiko
 from tqdm import tqdm
 
 conf: dict
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
 
 
 @contextlib.contextmanager
@@ -23,14 +27,14 @@ def HomeAssistantSSHClient() -> Generator[paramiko.SSHClient, None, None]:
         key_filename=conf["HA_SSH_KEY_FILE"],
     )
 
-    print("[✅] connected to HomeAssistant")
+    logger.info("[✅] connected to HomeAssistant")
     (_, stdout, _) = ssh_client.exec_command("uname -a")
     uname = stdout.read().decode()
     (_, stdout, _) = ssh_client.exec_command("echo $USER@$(hostname)")
     user_host = stdout.read().decode()
-    print(f"[ℹ️] {user_host}[ℹ️]{uname}", end="")
+    logger.info(f"[ℹ️] {user_host}[ℹ️]{uname}")
     yield ssh_client
-    print("[✅] closing connection")
+    logger.info("[✅] closing connection")
     ssh_client.close()
 
 
@@ -52,7 +56,7 @@ class TqdmUpTo(tqdm):
 
 
 def download_database(ssh_client, db_file: PurePath, destination_folder: Path):
-    print("downloading db")
+    logger.info("[ℹ️] downloading db")
     ftp_client = ssh_client.open_sftp()
     with TqdmUpTo(
         unit="B",
@@ -95,7 +99,6 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(
         description="script that imports raw sensor data from homeassistant into a duckdb database",
-        usage="ingest_homeassistant_db [--full_load] [--config_file=path/to/config.toml]",
     )
     parser.add_argument(
         "-f",
@@ -110,6 +113,13 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
+        "-v",
+        "--verbose",
+        type=argparse.FileType("r"),
+        help="should print output to stdout",
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
         "--config_file",
         type=argparse.FileType("r"),
         help="config file in TOML format",
@@ -120,6 +130,20 @@ def main() -> int:
     with open(args.config_file, "rb") as fp:
         conf = tomllib.load(fp)
 
+    logger.debug("loaded config: {conf}")
+
+    fileformatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    filehandler = logging.FileHandler(conf["LOG_FILE"], encoding="utf-8")
+    filehandler.setFormatter(fileformatter)
+    logger.addHandler(filehandler)
+    if args.verbose:
+        stdoutformatter = logging.Formatter("%(message)s")
+        stdouthandler = logging.StreamHandler()
+        stdouthandler.setFormatter(stdoutformatter)
+        logger.addHandler(stdouthandler)
+
+    logger.info(" ----- STARTING NEW SESSION ----- ")
+
     # download db locally
     if not args.skip_download:
         with HomeAssistantSSHClient() as ha:
@@ -128,16 +152,16 @@ def main() -> int:
                 ha, PurePosixPath(conf["HA_DB_FILE"]), Path(conf["STAGING_FOLDER"])
             )
     else:
-        print("[❗] skipping downloading file from ha server")
+        logger.info("[❗] skipping downloading file from ha server")
 
     # create a connection to the db file
     con = duckdb.connect(conf["ANALYTICAL_DB_FILE"])
     # ensure schemas and tables are there
     run_sql_query_file(con, "queries/schemas.sql")
-    print("[✅] ensured schemas are present in db")
+    logger.info("[✅] ensured schemas are present in db")
 
     # read staging file into duckdb database
-    print("[ℹ️] reading from ha database to analytical db...")
+    logger.info("[ℹ️] reading from ha database to analytical db...")
     run_sql_query_file(con, "queries/staging.home_assistant_events.sql")
     result = con.sql(
         """select 
@@ -146,7 +170,7 @@ def main() -> int:
         to_timestamp(max(last_updated_ts)) max_ts 
         from staging.home_assistant_events;""",
     ).fetchone()
-    print(
+    logger.info(
         f"[✅] staging success - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
     )
 
@@ -157,17 +181,17 @@ def main() -> int:
         max(last_updated) max_ts 
         from raw_data.events;""",
     ).fetchone()
-    print(
+    logger.info(
         f"[ℹ️] events stats before - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
     )
     if args.full_load:
-        print("[❗] integrating data to events table - full load")
+        logger.info("[❗] integrating data to events table - full load")
         run_sql_query_file(con, "queries/raw.events-full.sql")
-        print("[✅] success")
+        logger.info("[✅] success")
     else:
-        print("[ℹ️] integrating data to events table - delta load")
+        logger.info("[ℹ️] integrating data to events table - delta load")
         run_sql_query_file(con, "queries/raw.events-delta.sql")
-        print("[✅] success")
+        logger.info("[✅] success")
 
     result = con.sql(
         """select 
@@ -176,7 +200,7 @@ def main() -> int:
         max(last_updated) max_ts 
         from raw_data.events;""",
     ).fetchone()
-    print(
+    logger.info(
         f"[✅] events stats - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
     )
 
