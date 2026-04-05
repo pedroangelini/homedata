@@ -128,8 +128,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    with open(args.config_file, "rb") as fp:
-        conf = tomllib.load(fp)
+    try:
+        with open(args.config_file, "rb") as fp:
+            conf = tomllib.load(fp)
+    except FileNotFoundError as e:
+        print(f'[❌] config file not found ({args.config_file})')
+        return 1
 
     fileformatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     filehandler = logging.FileHandler(conf["LOG_FILE"], encoding="utf-8")
