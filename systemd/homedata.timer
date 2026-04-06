@@ -1,0 +1,10 @@
+[Unit]
+Description=Timer for homedata script
+Requires=homedata.service
+
+[Timer]
+Unit=homedata.service
+OnCalendar=*-*-* 0/1:15:00
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Downloads the db from Home Assistant, and integrates the data into a Duckdb database
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=</home/username/project>
+# Use absolute path to uv if necessary
+ExecStart=</home/username/.cargo/bin/uv> run ingest_homeassistant_db.py
+
+[Install]
+WantedBy=multi-user.target

@@ -12,7 +12,7 @@ The motivation for creating this was:
 
 This script relies on downloading the HA database via SSH, with key pair authentication (so no saving passwords/credentials in the script). Use the config.toml file.
 
-The repo uses [uv](https://github.com/astral-sh/uv) for managing the python virtual environment, and that includes [duckdb]()
+The repo uses [uv](https://github.com/astral-sh/uv) for managing the python virtual environment, and that uses [duckdb](https://duckdb.org/) as a database.
 
 ## Usage
 
@@ -52,13 +52,22 @@ homedata (database)
 │   └── events (table)
 ├── assets (schema - for future use)
 └── analysis (schema - for future use)
-
 ```
 
-## Running
 
-It should be fine to run this script periodically, every few hours or even faster. Since it only copies the sqlite file from HA without opening the live remote file, impact into the running HA instance should be minimal. The script also copies the Write-Ahead-Log (wal) file, so it should bring a very up-to-date version of the db.
-I plan on running it 3 or 4 times a day.
+## Running the script periodically, as a timed systemd service 
+
+The script was designed to run every hour or so, but since the script only copies the sqlite file from HA without opening the live remote file, impact into the running HA instance should be minimal, so you could push it to every few seconds if you whish.. The script also copies the Write-Ahead-Log (wal) file, so it should bring a very up-to-date version of the db.
+**The script does not check for two running instances, and will likely result in bad data (if it runs at all) if it accidentally runs twice or more times concurrently.**
+
+To install it as a systemd unit/timer, copy the files in `systemd`  folder to either `~/.config/systemd/user` or to `/etc/systemd/system/` (in which case you want to run the commands below with sudo and without --user), update the necessary fields.
+Run the script once with --full_load, then run
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable homedata.timer
+systemctl --user start homedata.timer
+```
 
 ## Logging
 
