@@ -96,9 +96,7 @@ def table_stats_str(result: tuple[int, datetime, datetime]) -> str:
     return f"count {result[0]}, min ts: {result[1].strftime("%Y-%m-%d %H:%M:%S %z")}, max ts: {result[2].strftime("%Y-%m-%d %H:%M:%S %z")}"
 
 
-def main() -> int:
-    global conf
-
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="script that imports raw sensor data from homeassistant into a duckdb database",
     )
@@ -127,7 +125,12 @@ def main() -> int:
         help="config file in TOML format",
         default=Path("./config.toml"),
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+def main() -> int:
+    global conf
+
+    args = parse_args()
 
     try:
         with open(args.config_file, "rb") as fp:
@@ -140,6 +143,7 @@ def main() -> int:
     filehandler = logging.FileHandler(conf["LOG_FILE"], encoding="utf-8")
     filehandler.setFormatter(fileformatter)
     logger.addHandler(filehandler)
+    
     if args.verbose:
         stdoutformatter = logging.Formatter("%(message)s")
         stdouthandler = logging.StreamHandler()
