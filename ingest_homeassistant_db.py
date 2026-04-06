@@ -24,7 +24,8 @@ def HomeAssistantSSHClient() -> Generator[paramiko.SSHClient, None, None]:
     ssh_client.connect(
         hostname=conf["HA_HOSTNAME"],
         username=conf["HA_USERNAME"],
-        key_filename=conf["HA_SSH_KEY_FILE"],
+        # paramiko expects a string, so let's ensure it's what the user expects
+        key_filename=str(Path(conf["HA_SSH_KEY_FILE"]).expanduser().resolve()), 
     )
 
     logger.info("[✅] connected to HomeAssistant")
