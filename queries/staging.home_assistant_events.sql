@@ -1,8 +1,3 @@
--- attach sqlite home assistant db from staging
-attach 'staging/home-assistant_v2.db' as ha_staging_db (
-    type sqlite
-);
-
 use homedata;
 
 use staging;

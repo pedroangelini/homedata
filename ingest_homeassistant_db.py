@@ -171,6 +171,13 @@ def main() -> int:
     logger.info("[✅] ensured schemas are present in db")
 
     # read staging file into duckdb database
+    logger.info("[⚙️] attaching to staged file")
+    q = f"""
+    attach '{conf["STAGING_FOLDER"]}/{Path(conf["HA_DB_FILE"]).name}' as ha_staging_db (
+        type sqlite
+    );
+    """
+    con.sql(q)
     logger.info("[⚙️] reading from ha database to analytical db...")
     run_sql_query_file(con, "queries/staging.home_assistant_events.sql")
     result = con.sql(
