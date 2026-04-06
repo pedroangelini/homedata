@@ -10,7 +10,7 @@ select
     split_part(entity_id, '.', 1) as entity_type,
     split_part(entity_id, '.', 2) as entity_name,
     state as state_value,
-    to_json(shared_attrs),
+    to_json(shared_attrs) as shared_attrs,
     old_state_id,
     ingested_at,
     current_localtimestamp () as loaded_at
