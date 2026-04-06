@@ -164,7 +164,6 @@ def main() -> int:
         logger.info("[❗] skipping downloading file from ha server")
 
     # create a connection to the db file
-
     con = duckdb.connect(conf["ANALYTICAL_DB_FILE"])
 
     # ensure schemas and tables are there
@@ -185,21 +184,23 @@ def main() -> int:
         f"[✅] staging success - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
     )
 
-    result = con.sql(
-        """select 
-        count(*) cnt,
-        min(last_updated) min_ts, 
-        max(last_updated) max_ts 
-        from raw_data.events;""",
-    ).fetchone()
-    logger.info(
-        f"[ℹ️] events stats before - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
-    )
     if args.full_load:
+        # if full_laod then we will create the raw events table
         logger.info("[❗] integrating data to events table - full load")
         run_sql_query_file(con, "queries/raw.events-full.sql")
         logger.info("[✅] success")
     else:
+        # if not full_load then we will check what's the lateste timestamp for logging, and 
+        result = con.sql(
+            """select 
+            count(*) cnt,
+            min(last_updated) min_ts, 
+            max(last_updated) max_ts 
+            from raw_data.events;""",
+        ).fetchone()
+        logger.info(
+            f"[ℹ️] events stats before - {table_stats_str(result)}"  # pyright: ignore[reportArgumentType]
+        )
         logger.info("[⚙️] integrating data to events table - delta load")
         run_sql_query_file(con, "queries/raw.events-delta.sql")
         logger.info("[✅] success")
